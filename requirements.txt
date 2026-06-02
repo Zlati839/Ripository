@@ -1,4 +1,3 @@
 streamlit
-easyocr
-numpy
+requests
 pillow
