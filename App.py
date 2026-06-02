@@ -1,67 +1,127 @@
 import streamlit as st
 from PIL import Image
-import base64
 import requests
+import base64
+import re
 
-st.title("🔍 Ingredient Scanner (No OCR Install Needed)")
+st.title("🔍 Smart Food Label Analyzer")
 
-st.write("Upload a food label image. The AI will read it automatically.")
+st.write("Upload a nutrition/ingredients label. The app extracts text, cleans it, and analyzes it.")
 
-BAD_INGREDIENTS = {
-    "aspartame": "Artificial sweetener",
+# -----------------------------
+# Risk signals (better than strict keywords)
+# -----------------------------
+RISK_KEYWORDS = {
+    "caffeine": "Stimulant (can affect sleep/heart rate)",
+    "preserv": "Preservatives detected",
+    "artificial": "Artificial additive detected",
+    "flavor": "Artificial flavoring likely",
+    "sweetener": "Non-sugar sweetener detected",
+    "erythritol": "Sugar alcohol sweetener",
     "sucralose": "Artificial sweetener",
-    "high fructose corn syrup": "Highly processed sweetener",
-    "msg": "Flavor enhancer",
-    "sodium nitrite": "Preservative",
-    "red 40": "Artificial dye",
-    "yellow 5": "Artificial dye"
+    "aspartame": "Artificial sweetener",
+    "color": "Possible food coloring",
+    "acid": "Additives or acidity regulators",
+    "zero": "Often ultra-processed 'diet' product signal"
 }
 
-uploaded_file = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"])
+# -----------------------------
+# OCR function (no installs needed)
+# -----------------------------
+def extract_text(image_bytes):
+    img_b64 = base64.b64encode(image_bytes).decode()
 
-def image_to_base64(img):
-    return base64.b64encode(img.read()).decode()
-
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_container_width=True)
-
-    st.subheader("📄 Reading text from image...")
-
-    # Convert image to base64
-    img_bytes = uploaded_file.getvalue()
-    img_b64 = base64.b64encode(img_bytes).decode()
-
-    # Use OCR API alternative (free endpoint style)
     response = requests.post(
         "https://api.ocr.space/parse/image",
         data={
-            "apikey": "helloworld",
+            "apikey": "helloworld",  # free demo key
             "base64Image": f"data:image/png;base64,{img_b64}"
         }
     )
 
     result = response.json()
 
-    text = ""
     if "ParsedResults" in result:
-        text = result["ParsedResults"][0]["ParsedText"]
+        return result["ParsedResults"][0]["ParsedText"]
+    return ""
 
-    st.subheader("📝 What was read:")
-    st.text_area("OCR Output", text, height=250)
+# -----------------------------
+# Clean OCR text (VERY IMPORTANT for your case)
+# -----------------------------
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
 
-    # Ingredient check
-    text_lower = text.lower()
+# -----------------------------
+# Score system
+# -----------------------------
+def calculate_score(found_items):
+    score = 100
+    score -= len(found_items) * 10
+    return max(score, 0)
+
+# -----------------------------
+# Upload image
+# -----------------------------
+uploaded_file = st.file_uploader("Upload label image", type=["jpg", "jpeg", "png"])
+
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded Image", use_container_width=True)
+
+    st.subheader("🔄 Reading image...")
+
+    text = extract_text(uploaded_file.getvalue())
+
+    if not text:
+        st.error("Could not read text from image.")
+        st.stop()
+
+    st.subheader("📄 Raw OCR Output")
+    st.text_area("", text, height=250)
+
+    # -----------------------------
+    # Clean text
+    # -----------------------------
+    cleaned = clean_text(text)
+
+    st.subheader("🧼 Cleaned Text (important for messy labels)")
+    st.text_area("", cleaned, height=150)
+
+    # -----------------------------
+    # Risk detection
+    # -----------------------------
     found = []
 
-    for ing, reason in BAD_INGREDIENTS.items():
-        if ing in text_lower:
-            found.append((ing, reason))
+    for word, reason in RISK_KEYWORDS.items():
+        if word in cleaned:
+            found.append((word, reason))
 
-    st.subheader("⚠️ Ingredient Analysis")
+    # -----------------------------
+    # Results
+    # -----------------------------
+    st.subheader("⚠️ Analysis")
+
+    score = calculate_score(found)
+
+    st.metric("Health Score (0–100)", score)
 
     if found:
-        for ing, reason in found:
-            st.warning(f"{ing.title()} → {reason}")
+        for w, r in found:
+            st.warning(f"{w.upper()} → {r}")
     else:
-        st.success("No flagged ingredients found.")
+        st.success("No strong risk signals detected.")
+
+    # -----------------------------
+    extra insight
+    # -----------------------------
+    st.subheader("🧠 Interpretation")
+
+    if score >= 80:
+        st.success("Likely low-risk / minimally processed.")
+    elif score >= 50:
+        st.info("Moderate processing detected.")
+    else:
+        st.error("Likely ultra-processed product (energy drinks / diet drinks often fall here).")
