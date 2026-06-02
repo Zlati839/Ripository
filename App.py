@@ -115,7 +115,7 @@ if uploaded_file:
         st.success("No strong risk signals detected.")
 
     # -----------------------------
-    extra insight
+    #extra insight
     # -----------------------------
     st.subheader("🧠 Interpretation")
 
