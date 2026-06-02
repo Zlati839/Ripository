@@ -1,72 +1,62 @@
 import streamlit as st
-import requests
 from PIL import Image
-import io
+import numpy as np
 import re
 
-st.title("Ingredient Label Checker")
+st.title("🔍 Ingredient Label Checker (No OCR Required)")
 
-# Get your free API key from https://ocr.space/
-API_KEY = st.secrets["OCR_SPACE_API_KEY"]
+st.write("""
+Upload a label image. Since no OCR engine is used,
+you can either:
+1. Try visual reading
+2. Or type detected ingredients manually
+""")
 
 BAD_INGREDIENTS = {
     "aspartame": "Artificial sweetener",
+    "sucralose": "Artificial sweetener",
     "high fructose corn syrup": "Highly processed sweetener",
-    "red 40": "Artificial food coloring",
-    "yellow 5": "Artificial food coloring",
     "msg": "Flavor enhancer",
-    "sodium nitrite": "Common preservative"
+    "sodium nitrite": "Preservative in processed meats",
+    "red 40": "Artificial dye",
+    "yellow 5": "Artificial dye",
+    "bht": "Synthetic preservative",
+    "bha": "Synthetic preservative",
+    "hydrogenated oil": "May contain trans fats"
 }
 
 uploaded_file = st.file_uploader(
-    "Upload ingredient label",
+    "Upload ingredient label image",
     type=["jpg", "jpeg", "png"]
 )
 
 if uploaded_file:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image")
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    image_bytes = io.BytesIO()
-    image.save(image_bytes, format="PNG")
-    image_bytes.seek(0)
+    st.subheader("✍️ Step 1: Enter ingredients manually")
+    user_text = st.text_area(
+        "Paste or type what you see on the label:"
+    )
 
-    with st.spinner("Reading label..."):
-        response = requests.post(
-            "https://api.ocr.space/parse/image",
-            files={"file": image_bytes},
-            data={
-                "apikey": API_KEY,
-                "language": "eng"
-            }
-        )
+    if user_text:
+        text_lower = user_text.lower()
 
-    result = response.json()
+        found = []
 
-    text = ""
+        for ingredient, description in BAD_INGREDIENTS.items():
+            if re.search(r"\b" + re.escape(ingredient) + r"\b", text_lower):
+                found.append((ingredient, description))
 
-    if result.get("ParsedResults"):
-        text = result["ParsedResults"][0]["ParsedText"]
+        st.subheader("⚠️ Analysis Result")
 
-    st.subheader("Detected Text")
-    st.text_area("", text, height=250)
+        if found:
+            for ing, desc in found:
+                st.warning(f"{ing.title()} → {desc}")
+        else:
+            st.success("No flagged ingredients found.")
 
-    found = []
+    st.divider()
 
-    text_lower = text.lower()
-
-    for ingredient, description in BAD_INGREDIENTS.items():
-        if ingredient.lower() in text_lower:
-            found.append((ingredient, description))
-
-    st.subheader("Ingredient Analysis")
-
-    if found:
-        for ingredient, description in found:
-            st.warning(
-                f"⚠️ {ingredient.title()} - {description}"
-            )
-    else:
-        st.success("No flagged ingredients found.")
-    if not found:
-        st.success("No common unhealthy ingredients detected.")
+    st.subheader("📌 Optional helper (image preview)")
+    st.write("Zoom in on the image and manually check ingredients above.")
