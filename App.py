@@ -1,108 +1,67 @@
 import streamlit as st
+import easyocr
+import numpy as np
 from PIL import Image
-import pytesseract
-import re
 
-st.set_page_config(page_title="Food Label Analyzer")
+st.set_page_config(page_title="Food Label Reader")
 
-st.title("🥫 Food Label Analyzer")
-st.write("Upload a food label image and I'll read it and identify potentially unhealthy ingredients.")
+st.title("🥫 Food Label Reader")
 
 uploaded_file = st.file_uploader(
-    "Upload a label image",
+    "Upload a food label image",
     type=["jpg", "jpeg", "png"]
 )
 
-# Ingredients commonly considered unhealthy
-UNHEALTHY_INGREDIENTS = [
+UNHEALTHY = [
     "high fructose corn syrup",
     "corn syrup",
     "hydrogenated oil",
     "partially hydrogenated oil",
     "trans fat",
+    "aspartame",
+    "sucralose",
+    "msg",
     "artificial flavor",
-    "artificial flavours",
-    "artificial color",
     "artificial colour",
     "red 40",
     "yellow 5",
-    "yellow 6",
-    "blue 1",
-    "blue 2",
-    "aspartame",
-    "sucralose",
-    "acesulfame potassium",
-    "msg",
-    "monosodium glutamate"
+    "yellow 6"
 ]
-
-def analyze_text(text):
-    findings = []
-
-    lower_text = text.lower()
-
-    # Ingredient checks
-    for ingredient in UNHEALTHY_INGREDIENTS:
-        if ingredient in lower_text:
-            findings.append(f"⚠ Found: {ingredient}")
-
-    # Sugar check
-    sugar_match = re.search(r"sugars?\s*(\d+)", lower_text)
-    if sugar_match:
-        sugar = int(sugar_match.group(1))
-        if sugar >= 15:
-            findings.append(
-                f"⚠ High sugar content detected ({sugar}g)"
-            )
-
-    # Sodium check
-    sodium_match = re.search(r"sodium\s*(\d+)", lower_text)
-    if sodium_match:
-        sodium = int(sodium_match.group(1))
-        if sodium >= 400:
-            findings.append(
-                f"⚠ High sodium content detected ({sodium}mg)"
-            )
-
-    # Saturated fat check
-    sat_fat_match = re.search(
-        r"saturated fat\s*(\d+)",
-        lower_text
-    )
-
-    if sat_fat_match:
-        sat_fat = int(sat_fat_match.group(1))
-        if sat_fat >= 5:
-            findings.append(
-                f"⚠ High saturated fat detected ({sat_fat}g)"
-            )
-
-    return findings
 
 if uploaded_file:
 
     image = Image.open(uploaded_file)
 
-    st.image(image, caption="Uploaded Label", use_container_width=True)
+    st.image(image, caption="Uploaded Label")
 
     with st.spinner("Reading label..."):
-        extracted_text = pytesseract.image_to_string(image)
 
-    st.subheader("📄 Extracted Text")
+        reader = easyocr.Reader(['en'])
+
+        results = reader.readtext(np.array(image))
+
+        extracted_text = "\n".join(
+            [item[1] for item in results]
+        )
+
+    st.subheader("📄 Everything Read From The Label")
+
     st.text_area(
-        "What was read from the label",
+        "Detected Text",
         extracted_text,
         height=300
     )
 
-    findings = analyze_text(extracted_text)
+    st.subheader("⚠ Potential Concerns")
 
-    st.subheader("🔍 Health Analysis")
+    found = False
 
-    if findings:
-        for item in findings:
-            st.warning(item)
-    else:
-        st.success(
-            "No obvious unhealthy ingredients or nutrition concerns detected."
-        )
+    lower_text = extracted_text.lower()
+
+    for ingredient in UNHEALTHY:
+        if ingredient in lower_text:
+            st.warning(f"Found: {ingredient}")
+            found = True
+
+    if not found:
+        st.success("No common unhealthy ingredients detected.")
