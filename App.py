@@ -59,7 +59,7 @@ def clean_text(text):
 # -----------------------------
 def calculate_score(found_items):
     score = 100
-    score -= len(found_items) * 10
+    score -= len(found_items) * 15
     return max(score, 0)
 
 # -----------------------------
